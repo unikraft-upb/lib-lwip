@@ -1,0 +1,255 @@
+From af8c58f96876356ad87744bfa60f6ac1455ecf7a Mon Sep 17 00:00:00 2001
+Message-Id: <af8c58f96876356ad87744bfa60f6ac1455ecf7a.1667973389.git.razvan.deaconescu@cs.pub.ro>
+From: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+Date: Wed, 9 Nov 2022 07:55:47 +0200
+Subject: [PATCH] Make changes for Musl support
+
+Signed-off-by: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+---
+ src/api/netdb.c            |  6 ++++--
+ src/api/sockets.c          | 12 +++++++++---
+ src/include/lwip/inet.h    | 28 ++++++++++++++++++++--------
+ src/include/lwip/sockets.h | 16 ++++++++++++++++
+ 4 files changed, 49 insertions(+), 13 deletions(-)
+
+diff --git a/src/api/netdb.c b/src/api/netdb.c
+index 8771425..34abaa3 100644
+--- a/src/api/netdb.c
++++ b/src/api/netdb.c
+@@ -57,9 +57,11 @@ struct gethostbyname_r_helper {
+ };
+ 
+ /** h_errno is exported in netdb.h for access by applications. */
++#if 0
+ #if LWIP_DNS_API_DECLARE_H_ERRNO
+ int h_errno;
+ #endif /* LWIP_DNS_API_DECLARE_H_ERRNO */
++#endif /* #if 0 */
+ 
+ /** define "hostent" variables storage: 0 if we use a static (but unprotected)
+  * set of variables for lwip_gethostbyname, 1 if we use a local storage */
+@@ -374,7 +376,7 @@ lwip_getaddrinfo(const char *nodename, const char *servname,
+     /* set up sockaddr */
+     inet6_addr_from_ip6addr(&sa6->sin6_addr, ip_2_ip6(&addr));
+     sa6->sin6_family = AF_INET6;
+-    sa6->sin6_len = sizeof(struct sockaddr_in6);
++    //sa6->sin6_len = sizeof(struct sockaddr_in6);
+     sa6->sin6_port = lwip_htons((u16_t)port_nr);
+     sa6->sin6_scope_id = ip6_addr_zone(ip_2_ip6(&addr));
+     ai->ai_family = AF_INET6;
+@@ -385,7 +387,7 @@ lwip_getaddrinfo(const char *nodename, const char *servname,
+     /* set up sockaddr */
+     inet_addr_from_ip4addr(&sa4->sin_addr, ip_2_ip4(&addr));
+     sa4->sin_family = AF_INET;
+-    sa4->sin_len = sizeof(struct sockaddr_in);
++    //sa4->sin_len = sizeof(struct sockaddr_in);
+     sa4->sin_port = lwip_htons((u16_t)port_nr);
+     ai->ai_family = AF_INET;
+ #endif /* LWIP_IPV4 */
+diff --git a/src/api/sockets.c b/src/api/sockets.c
+index cb7df91..7cd3718 100644
+--- a/src/api/sockets.c
++++ b/src/api/sockets.c
+@@ -87,11 +87,11 @@
+ 
+ #if LWIP_IPV4
+ #define IP4ADDR_PORT_TO_SOCKADDR(sin, ipaddr, port) do { \
+-      (sin)->sin_len = sizeof(struct sockaddr_in); \
++      /*(sin)->sin_len = sizeof(struct sockaddr_in); */\
+       (sin)->sin_family = AF_INET; \
+       (sin)->sin_port = lwip_htons((port)); \
+       inet_addr_from_ip4addr(&(sin)->sin_addr, ipaddr); \
+-      memset((sin)->sin_zero, 0, SIN_ZERO_LEN); }while(0)
++      memset((sin)->sin_zero, 0, 8); }while(0)
+ #define SOCKADDR4_TO_IP4ADDR_PORT(sin, ipaddr, port) do { \
+     inet_addr_to_ip4addr(ip_2_ip4(ipaddr), &((sin)->sin_addr)); \
+     (port) = lwip_ntohs((sin)->sin_port); }while(0)
+@@ -99,7 +99,7 @@
+ 
+ #if LWIP_IPV6
+ #define IP6ADDR_PORT_TO_SOCKADDR(sin6, ipaddr, port) do { \
+-      (sin6)->sin6_len = sizeof(struct sockaddr_in6); \
++      /*(sin6)->sin6_len = sizeof(struct sockaddr_in6); */\
+       (sin6)->sin6_family = AF_INET6; \
+       (sin6)->sin6_port = lwip_htons((port)); \
+       (sin6)->sin6_flowinfo = 0; \
+@@ -696,9 +696,11 @@ lwip_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
+     }
+ 
+     IPADDR_PORT_TO_SOCKADDR(&tempaddr, &naddr, port);
++    /*
+     if (*addrlen > tempaddr.sa.sa_len) {
+       *addrlen = tempaddr.sa.sa_len;
+     }
++    */
+     MEMCPY(addr, &tempaddr, *addrlen);
+ 
+     LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_accept(%d) returning new sock=%d addr=", s, newsock));
+@@ -1041,11 +1043,13 @@ lwip_sock_make_addr(struct netconn *conn, ip_addr_t *fromaddr, u16_t port,
+ #endif /* LWIP_IPV4 && LWIP_IPV6 */
+ 
+   IPADDR_PORT_TO_SOCKADDR(&saddr, fromaddr, port);
++  /*/
+   if (*fromlen < saddr.sa.sa_len) {
+     truncated = 1;
+   } else if (*fromlen > saddr.sa.sa_len) {
+     *fromlen = saddr.sa.sa_len;
+   }
++  */
+   MEMCPY(from, &saddr, *fromlen);
+   return truncated;
+ }
+@@ -2733,9 +2737,11 @@ lwip_getaddrname(int s, struct sockaddr *name, socklen_t *namelen, u8_t local)
+   ip_addr_debug_print_val(SOCKETS_DEBUG, naddr);
+   LWIP_DEBUGF(SOCKETS_DEBUG, (" port=%"U16_F")\n", port));
+ 
++  /*
+   if (*namelen > saddr.sa.sa_len) {
+     *namelen = saddr.sa.sa_len;
+   }
++  */
+   MEMCPY(name, &saddr, *namelen);
+ 
+   sock_set_errno(sock, 0);
+diff --git a/src/include/lwip/inet.h b/src/include/lwip/inet.h
+index 2982a0f..62a82bf 100644
+--- a/src/include/lwip/inet.h
++++ b/src/include/lwip/inet.h
+@@ -44,11 +44,14 @@
+ #include "lwip/def.h"
+ #include "lwip/ip_addr.h"
+ #include "lwip/ip6_addr.h"
++#include <netinet/in.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
++#if 0
++
+ /* If your port already typedef's in_addr_t, define IN_ADDR_T_DEFINED
+    to prevent this code from redefining it. */
+ #if !defined(in_addr_t) && !defined(IN_ADDR_T_DEFINED)
+@@ -130,11 +133,15 @@ extern const struct in6_addr in6addr_any;
+ #endif
+ #endif
+ 
++#endif /* #if 0 */
++
+ #if LWIP_IPV4
+ 
+ #define inet_addr_from_ip4addr(target_inaddr, source_ipaddr) ((target_inaddr)->s_addr = ip4_addr_get_u32(source_ipaddr))
+ #define inet_addr_to_ip4addr(target_ipaddr, source_inaddr)   (ip4_addr_set_u32(target_ipaddr, (source_inaddr)->s_addr))
+ 
++#if 0
++
+ /* directly map this to the lwip internal functions */
+ #define inet_addr(cp)                   ipaddr_addr(cp)
+ #define inet_aton(cp, addr)             ip4addr_aton(cp, (ip4_addr_t*)addr)
+@@ -143,17 +150,21 @@ extern const struct in6_addr in6addr_any;
+ 
+ #endif /* LWIP_IPV4 */
+ 
++#endif /* #if 0 */
++
+ #if LWIP_IPV6
+-#define inet6_addr_from_ip6addr(target_in6addr, source_ip6addr) {(target_in6addr)->un.u32_addr[0] = (source_ip6addr)->addr[0]; \
+-                                                                 (target_in6addr)->un.u32_addr[1] = (source_ip6addr)->addr[1]; \
+-                                                                 (target_in6addr)->un.u32_addr[2] = (source_ip6addr)->addr[2]; \
+-                                                                 (target_in6addr)->un.u32_addr[3] = (source_ip6addr)->addr[3];}
+-#define inet6_addr_to_ip6addr(target_ip6addr, source_in6addr)   {(target_ip6addr)->addr[0] = (source_in6addr)->un.u32_addr[0]; \
+-                                                                 (target_ip6addr)->addr[1] = (source_in6addr)->un.u32_addr[1]; \
+-                                                                 (target_ip6addr)->addr[2] = (source_in6addr)->un.u32_addr[2]; \
+-                                                                 (target_ip6addr)->addr[3] = (source_in6addr)->un.u32_addr[3]; \
++#define inet6_addr_from_ip6addr(target_in6addr, source_ip6addr) {(target_in6addr)->__in6_union.__s6_addr32[0] = (source_ip6addr)->addr[0]; \
++                                                                 (target_in6addr)->__in6_union.__s6_addr32[1] = (source_ip6addr)->addr[1]; \
++                                                                 (target_in6addr)->__in6_union.__s6_addr32[2] = (source_ip6addr)->addr[2]; \
++                                                                 (target_in6addr)->__in6_union.__s6_addr32[3] = (source_ip6addr)->addr[3];}
++#define inet6_addr_to_ip6addr(target_ip6addr, source_in6addr)   {(target_ip6addr)->addr[0] = (source_in6addr)->__in6_union.__s6_addr32[0]; \
++                                                                 (target_ip6addr)->addr[1] = (source_in6addr)->__in6_union.__s6_addr32[1]; \
++                                                                 (target_ip6addr)->addr[2] = (source_in6addr)->__in6_union.__s6_addr32[2]; \
++                                                                 (target_ip6addr)->addr[3] = (source_in6addr)->__in6_union.__s6_addr32[3]; \
+                                                                  ip6_addr_clear_zone(target_ip6addr);}
+ 
++#if 0
++
+ /* directly map this to the lwip internal functions */
+ #define inet6_aton(cp, addr)            ip6addr_aton(cp, (ip6_addr_t*)addr)
+ #define inet6_ntoa(addr)                ip6addr_ntoa((const ip6_addr_t*)&(addr))
+@@ -161,6 +172,7 @@ extern const struct in6_addr in6addr_any;
+ 
+ #endif /* LWIP_IPV6 */
+ 
++#endif /* #if 0 */
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/src/include/lwip/sockets.h b/src/include/lwip/sockets.h
+index d70d36c..61b3245 100644
+--- a/src/include/lwip/sockets.h
++++ b/src/include/lwip/sockets.h
+@@ -39,10 +39,16 @@
+ #ifndef LWIP_HDR_SOCKETS_H
+ #define LWIP_HDR_SOCKETS_H
+ 
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <net/if.h>
++#include <poll.h>
++
+ #include "lwip/opt.h"
+ 
+ #if LWIP_SOCKET /* don't build if not configured for use in lwipopts.h */
+ 
++#if 0
+ #include "lwip/ip_addr.h"
+ #include "lwip/netif.h"
+ #include "lwip/err.h"
+@@ -272,6 +278,8 @@ struct linger {
+ #define IP_TTL             2
+ #define IP_PKTINFO         8
+ 
++#endif /* #if 0 */
++
+ #if LWIP_TCP
+ /*
+  * Options for level IPPROTO_TCP
+@@ -283,6 +291,8 @@ struct linger {
+ #define TCP_KEEPCNT    0x05    /* set pcb->keep_cnt   - Use number of probes sent for get/setsockopt */
+ #endif /* LWIP_TCP */
+ 
++#if 0
++
+ #if LWIP_IPV6
+ /*
+  * Options for level IPPROTO_IPV6
+@@ -462,6 +472,8 @@ typedef struct ipv6_mreq {
+   #define SHUT_RDWR 2
+ #endif
+ 
++#endif /* #if 0 */
++
+ /* FD_SET used for lwip_select */
+ #ifndef FD_SET
+ #undef  FD_SETSIZE
+@@ -489,6 +501,8 @@ typedef struct fd_set
+ #define LWIP_SELECT_MAXNFDS FD_SETSIZE
+ #endif /* FD_SET */
+ 
++#if 0
++
+ /* poll-related defines and types */
+ /* @todo: find a better way to guard the definition of these defines and types if already defined */
+ #if !defined(POLLIN) && !defined(POLLOUT)
+@@ -525,6 +539,8 @@ struct timeval {
+ };
+ #endif /* LWIP_TIMEVAL_PRIVATE */
+ 
++#endif /* #if 0 */
++
+ #define lwip_socket_init() /* Compatibility define, no init needed. */
+ void lwip_socket_thread_init(void); /* LWIP_NETCONN_SEM_PER_THREAD==1: initialize thread-local semaphore */
+ void lwip_socket_thread_cleanup(void); /* LWIP_NETCONN_SEM_PER_THREAD==1: destroy thread-local semaphore */
+-- 
+2.17.1
+
