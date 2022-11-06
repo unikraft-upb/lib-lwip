@@ -1,0 +1,45 @@
+From 81198896f0bd02ad46e208050a87715535ab0ca7 Mon Sep 17 00:00:00 2001
+Message-Id: <81198896f0bd02ad46e208050a87715535ab0ca7.1667754775.git.razvan.deaconescu@cs.pub.ro>
+In-Reply-To: <da32c9dee975fddce5ea6e8867f7972a3edbff54.1667754775.git.razvan.deaconescu@cs.pub.ro>
+References: <da32c9dee975fddce5ea6e8867f7972a3edbff54.1667754775.git.razvan.deaconescu@cs.pub.ro>
+From: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+Date: Sat, 5 Nov 2022 17:50:32 +0200
+Subject: [PATCH 2/3] src/include: If Musl is present, include net/if.h
+
+When using Musl, the definition of IF_NAMESIZE in include/lwip/if_api.h
+causes an warning of double define. This is because Musl defines
+IF_NAMESIZE without macro guards, expecting it would be the first to
+include them.
+
+This commit includes the net/if.h Musl header file before the definition in
+include/lwip/if_api.h thus remove the warning.
+
+It is added in include/lwip/netif.h that is included by included by
+include/lwip/if_api.h. This is to "map" the netif.h LWIP header with the
+net/if.h Musl header.
+
+The inclusion is guarded by a check of Musl (#if CONFIG_LIBMUSL).
+
+Signed-off-by: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+---
+ src/include/lwip/netif.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/include/lwip/netif.h b/src/include/lwip/netif.h
+index 911196a..f8d8bf4 100644
+--- a/src/include/lwip/netif.h
++++ b/src/include/lwip/netif.h
+@@ -37,6 +37,10 @@
+ #ifndef LWIP_HDR_NETIF_H
+ #define LWIP_HDR_NETIF_H
+ 
++#if CONFIG_LIBMUSL
++#include <net/if.h>
++#endif
++
+ #include "lwip/opt.h"
+ 
+ #define ENABLE_LOOPBACK (LWIP_NETIF_LOOPBACK || LWIP_HAVE_LOOPIF)
+-- 
+2.17.1
+

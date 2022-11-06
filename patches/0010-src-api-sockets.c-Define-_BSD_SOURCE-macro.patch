@@ -1,0 +1,30 @@
+From 4f725517d378958b498ea33e86114698ee40a3a7 Mon Sep 17 00:00:00 2001
+Message-Id: <4f725517d378958b498ea33e86114698ee40a3a7.1667754775.git.razvan.deaconescu@cs.pub.ro>
+In-Reply-To: <da32c9dee975fddce5ea6e8867f7972a3edbff54.1667754775.git.razvan.deaconescu@cs.pub.ro>
+References: <da32c9dee975fddce5ea6e8867f7972a3edbff54.1667754775.git.razvan.deaconescu@cs.pub.ro>
+From: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+Date: Sun, 6 Nov 2022 19:10:10 +0200
+Subject: [PATCH 3/3] src/api/sockets.c: Define _BSD_SOURCE macro
+
+Define _BSD_SOURCE macro to allow the use of `struct ifreq`.
+
+Signed-off-by: Razvan Deaconescu <razvan.deaconescu@cs.pub.ro>
+---
+ src/api/sockets.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/api/sockets.c b/src/api/sockets.c
+index cb7df91..56d4705 100644
+--- a/src/api/sockets.c
++++ b/src/api/sockets.c
+@@ -37,6 +37,7 @@
+  *
+  */
+ 
++#define _BSD_SOURCE
+ #include "lwip/opt.h"
+ 
+ #if LWIP_SOCKET /* don't build if not configured for use in lwipopts.h */
+-- 
+2.17.1
+
