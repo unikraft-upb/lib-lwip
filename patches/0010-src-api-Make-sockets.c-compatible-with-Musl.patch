@@ -1,0 +1,111 @@
+From f835e9219d46a0719d0a86c8ddc4eae11c0e291f Mon Sep 17 00:00:00 2001
+Message-Id: <f835e9219d46a0719d0a86c8ddc4eae11c0e291f.1668956050.git.razvand@unikraft.io>
+In-Reply-To: <4837708b65882bc30466e0185de5d6141c6f4517.1668956050.git.razvand@unikraft.io>
+References: <4837708b65882bc30466e0185de5d6141c6f4517.1668956050.git.razvand@unikraft.io>
+From: Razvan Deaconescu <razvand@unikraft.io>
+Date: Sun, 20 Nov 2022 16:53:38 +0200
+Subject: [PATCH 4/4] src/api: Make sockets.c compatible with Musl
+
+Remove functions, macros and variables from `src/api/sockets.c` to make
+it compatible with Musl.
+
+Signed-off-by: Razvan Deaconescu <razvand@unikraft.io>
+---
+ src/api/sockets.c | 22 ++++++++--------------
+ 1 file changed, 8 insertions(+), 14 deletions(-)
+
+diff --git a/src/api/sockets.c b/src/api/sockets.c
+index 7852635..ed06ea3 100644
+--- a/src/api/sockets.c
++++ b/src/api/sockets.c
+@@ -37,6 +37,9 @@
+  *
+  */
+ 
++#include <sys/time.h>
++
++#define _BSD_SOURCE
+ #include "lwip/opt.h"
+ 
+ #if LWIP_SOCKET /* don't build if not configured for use in lwipopts.h */
+@@ -87,11 +90,10 @@
+ 
+ #if LWIP_IPV4
+ #define IP4ADDR_PORT_TO_SOCKADDR(sin, ipaddr, port) do { \
+-      (sin)->sin_len = sizeof(struct sockaddr_in); \
+       (sin)->sin_family = AF_INET; \
+       (sin)->sin_port = lwip_htons((port)); \
+       inet_addr_from_ip4addr(&(sin)->sin_addr, ipaddr); \
+-      memset((sin)->sin_zero, 0, SIN_ZERO_LEN); }while(0)
++      memset((sin)->sin_zero, 0, 8); }while(0)
+ #define SOCKADDR4_TO_IP4ADDR_PORT(sin, ipaddr, port) do { \
+     inet_addr_to_ip4addr(ip_2_ip4(ipaddr), &((sin)->sin_addr)); \
+     (port) = lwip_ntohs((sin)->sin_port); }while(0)
+@@ -99,7 +101,6 @@
+ 
+ #if LWIP_IPV6
+ #define IP6ADDR_PORT_TO_SOCKADDR(sin6, ipaddr, port) do { \
+-      (sin6)->sin6_len = sizeof(struct sockaddr_in6); \
+       (sin6)->sin6_family = AF_INET6; \
+       (sin6)->sin6_port = lwip_htons((port)); \
+       (sin6)->sin6_flowinfo = 0; \
+@@ -286,6 +287,7 @@ static struct lwip_select_cb *select_cb_list;
+ /* Forward declaration of some functions */
+ #if LWIP_SOCKET_SELECT || LWIP_SOCKET_POLL
+ static void event_callback(struct netconn *conn, enum netconn_evt evt, u16_t len);
++void lwip_posix_socket_event_callback(struct lwip_sock *sock, enum netconn_evt evt, u16_t len);
+ #define DEFAULT_SOCKET_EVENTCB event_callback
+ static void select_check_waiters(int s, int has_recvevent, int has_sendevent, int has_errevent);
+ #else
+@@ -529,6 +531,7 @@ alloc_socket(struct netconn *newconn, int accepted)
+        * (unless it has been created by accept()). */
+       sockets[i].sendevent  = (NETCONNTYPE_GROUP(newconn->type) == NETCONN_TCP ? (accepted != 0) : 1);
+       sockets[i].errevent   = 0;
++      sockets[i].sock_data  = NULL;
+ #endif /* LWIP_SOCKET_SELECT || LWIP_SOCKET_POLL */
+       return i + LWIP_SOCKET_OFFSET;
+     }
+@@ -695,9 +698,6 @@ lwip_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
+     }
+ 
+     IPADDR_PORT_TO_SOCKADDR(&tempaddr, &naddr, port);
+-    if (*addrlen > tempaddr.sa.sa_len) {
+-      *addrlen = tempaddr.sa.sa_len;
+-    }
+     MEMCPY(addr, &tempaddr, *addrlen);
+ 
+     LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_accept(%d) returning new sock=%d addr=", s, newsock));
+@@ -1040,11 +1040,6 @@ lwip_sock_make_addr(struct netconn *conn, ip_addr_t *fromaddr, u16_t port,
+ #endif /* LWIP_IPV4 && LWIP_IPV6 */
+ 
+   IPADDR_PORT_TO_SOCKADDR(&saddr, fromaddr, port);
+-  if (*fromlen < saddr.sa.sa_len) {
+-    truncated = 1;
+-  } else if (*fromlen > saddr.sa.sa_len) {
+-    *fromlen = saddr.sa.sa_len;
+-  }
+   MEMCPY(from, &saddr, *fromlen);
+   return truncated;
+ }
+@@ -2551,6 +2546,8 @@ event_callback(struct netconn *conn, enum netconn_evt evt, u16_t len)
+       break;
+   }
+ 
++  lwip_posix_socket_event_callback(sock, evt, len);
++
+   if (sock->select_waiting && check_waiters) {
+     /* Save which events are active */
+     int has_recvevent, has_sendevent, has_errevent;
+@@ -2739,9 +2736,6 @@ lwip_getaddrname(int s, struct sockaddr *name, socklen_t *namelen, u8_t local)
+   ip_addr_debug_print_val(SOCKETS_DEBUG, naddr);
+   LWIP_DEBUGF(SOCKETS_DEBUG, (" port=%"U16_F")\n", port));
+ 
+-  if (*namelen > saddr.sa.sa_len) {
+-    *namelen = saddr.sa.sa_len;
+-  }
+   MEMCPY(name, &saddr, *namelen);
+ 
+   sock_set_errno(sock, 0);
+-- 
+2.17.1
+
